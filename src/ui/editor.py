@@ -10,53 +10,51 @@ from src.compiler.generator import CodeGenerator
 class FlowchartEditor:
     def __init__(self, root):
         self.root = root
-        self.nodes = [] 
-        self.connections = [] 
+        self.nodes = []
+        self.connections = []  # (node1, node2, line_id, label)
         self.current_tool = "SELECT"
         self.selected_node = None
         self.connection_start_node = None
-        
-        # Use PanedWindow for resizability
-        self.paned_window = tk.PanedWindow(root, orient=tk.HORIZONTAL, bg=COLORS["grid"], sashwidth=4, sashrelief=tk.RAISED)
+
+        self.paned_window = tk.PanedWindow(root, orient=tk.HORIZONTAL, bg=COLORS["grid"], sashwidth=4)
         self.paned_window.pack(fill=tk.BOTH, expand=True)
 
-        # Toolbar Pane
         self.toolbar_pane = tk.Frame(self.paned_window, bg=COLORS["background"])
         self.toolbar = Toolbar(self.toolbar_pane, self.set_tool, self.on_drop)
-        self.toolbar.pack(fill=tk.BOTH, expand=True) # Scrollbar needs to expand
-        self.paned_window.add(self.toolbar_pane, minsize=250, width=320) # Default width
-        
-        # Canvas Pane
+        self.toolbar.pack(fill=tk.BOTH, expand=True)
+        self.paned_window.add(self.toolbar_pane, minsize=250, width=320)
+
         self.canvas_pane = tk.Frame(self.paned_window, bg=COLORS["grid"])
         self.canvas = tk.Canvas(self.canvas_pane, bg="white", highlightthickness=0)
         self.canvas.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         self.paned_window.add(self.canvas_pane, minsize=400)
-        
+
         self.draw_grid()
 
-        # Events
         self.canvas.bind("<Button-1>", self.on_canvas_click)
         self.canvas.bind("<B1-Motion>", self.on_canvas_drag)
         self.canvas.bind("<Double-Button-1>", self.on_double_click)
         self.canvas.bind("<Configure>", self.on_resize)
         self.root.bind("<Delete>", lambda e: self.delete_selected())
 
+    # ---------------- GRID ----------------
     def draw_grid(self):
         self.canvas.delete("grid")
         w = self.canvas.winfo_width()
         h = self.canvas.winfo_height()
         step = 25
+
         for i in range(0, w, step):
-            width = 2 if i % 100 == 0 else 1
-            self.canvas.create_line(i, 0, i, h, fill=COLORS["grid"], width=width, tags="grid")
+            self.canvas.create_line(i, 0, i, h, fill=COLORS["grid"], tags="grid")
         for i in range(0, h, step):
-            width = 2 if i % 100 == 0 else 1
-            self.canvas.create_line(0, i, w, i, fill=COLORS["grid"], width=width, tags="grid")
+            self.canvas.create_line(0, i, w, i, fill=COLORS["grid"], tags="grid")
+
         self.canvas.tag_lower("grid")
 
     def on_resize(self, event):
         self.draw_grid()
 
+    # ---------------- TOOL ----------------
     def set_tool(self, tool):
         if tool == "CLEAR":
             self.clear_canvas()
@@ -75,11 +73,12 @@ class FlowchartEditor:
 
         self.current_tool = tool
         self.connection_start_node = None
-        print(f"Tool selected: {tool}")
 
+    # ---------------- ADD NODE ----------------
     def on_drop(self, root_x, root_y, tool_type):
         canvas_x = root_x - self.canvas.winfo_rootx()
         canvas_y = root_y - self.canvas.winfo_rooty()
+
         if 0 <= canvas_x <= self.canvas.winfo_width() and 0 <= canvas_y <= self.canvas.winfo_height():
             self.add_node(tool_type, canvas_x, canvas_y)
 
@@ -93,20 +92,24 @@ class FlowchartEditor:
 
         node = FlowchartShape(self.canvas, node_type, x, y, text)
         self.nodes.append(node)
-        
+
         if node_type in [NodeType.PROCESS, NodeType.DECISION, NodeType.INPUT, NodeType.OUTPUT]:
             self.prompt_node_text(node)
 
     def prompt_node_text(self, node):
-        prompt = "Enter code/statement:"
-        if node.node_type == NodeType.INPUT: prompt = "Enter variable name:"
-        elif node.node_type == NodeType.OUTPUT: prompt = "Enter value to print:"
-        elif node.node_type == NodeType.DECISION: prompt = "Enter condition (e.g. x > 5):"
-            
-        new_text = simpledialog.askstring("Edit Node", prompt, initialvalue=node.text, parent=self.root)
-        if new_text:
-            node.update_text(new_text)
+        prompt = "Enter code:"
+        if node.node_type == NodeType.INPUT:
+            prompt = "Enter variable name:"
+        elif node.node_type == NodeType.OUTPUT:
+            prompt = "Enter value to print:"
+        elif node.node_type == NodeType.DECISION:
+            prompt = "Enter condition (e.g. x > 5):"
 
+        text = simpledialog.askstring("Edit Node", prompt, parent=self.root)
+        if text:
+            node.update_text(text)
+
+    # ---------------- CONNECTION ----------------
     def on_canvas_click(self, event):
         x, y = event.x, event.y
         clicked_node = self.find_node_at(x, y)
@@ -122,9 +125,50 @@ class FlowchartEditor:
                         self.current_tool = "SELECT"
             else:
                 self.connection_start_node = None
-                self.current_tool = "SELECT"
         else:
             self.selected_node = clicked_node
+
+    def add_connection(self, node1, node2):
+        # Prevent duplicate
+        for n1, n2, _, _ in self.connections:
+            if n1 == node1 and n2 == node2:
+                return
+
+        label = None
+
+        # 🔥 KEY FIX: Ask TRUE/FALSE for decisions
+        if node1.node_type == NodeType.DECISION:
+            label = simpledialog.askstring(
+                "Branch Type",
+                "Enter branch (TRUE / FALSE):",
+                parent=self.root
+            )
+
+            if not label or label.upper() not in ["TRUE", "FALSE"]:
+                messagebox.showerror("Error", "You must enter TRUE or FALSE")
+                return
+
+            label = label.upper()
+
+        line_id = self.canvas.create_line(
+            node1.x, node1.y, node2.x, node2.y,
+            arrow=tk.LAST, width=3, fill=COLORS["text"], smooth=True
+        )
+
+        # Optional: show label on canvas
+        if label:
+            mid_x = (node1.x + node2.x) / 2
+            mid_y = (node1.y + node2.y) / 2
+            self.canvas.create_text(mid_x, mid_y, text=label, fill="green")
+
+        self.connections.append((node1, node2, line_id, label))
+
+    # ---------------- UTIL ----------------
+    def find_node_at(self, x, y):
+        for node in reversed(self.nodes):
+            if node.contains(x, y):
+                return node
+        return None
 
     def on_canvas_drag(self, event):
         if self.selected_node:
@@ -133,80 +177,71 @@ class FlowchartEditor:
             self.selected_node.move(dx, dy)
             self.update_connections()
 
+    def update_connections(self):
+        for node1, node2, line_id, _ in self.connections:
+            self.canvas.coords(line_id, node1.x, node1.y, node2.x, node2.y)
+
     def on_double_click(self, event):
         node = self.find_node_at(event.x, event.y)
         if node:
             self.prompt_node_text(node)
 
-    def find_node_at(self, x, y):
-        for node in reversed(self.nodes):
-            if node.contains(x, y):
-                return node
-        return None
-
-    def add_connection(self, node1, node2):
-        for n1, n2, _ in self.connections:
-            if n1 == node1 and n2 == node2:
-                return
-        line_id = self.canvas.create_line(node1.x, node1.y, node2.x, node2.y, arrow=tk.LAST, width=3, fill=COLORS["text"], smooth=True)
-        self.connections.append((node1, node2, line_id))
-
-    def update_connections(self):
-        for node1, node2, line_id in self.connections:
-            self.canvas.coords(line_id, node1.x, node1.y, node2.x, node2.y)
-            self.canvas.tag_lower(line_id)
-            self.canvas.tag_lower("grid")
-
+    # ---------------- AUTO CONNECT ----------------
     def auto_connect(self):
-        if len(self.nodes) < 2: return
+        if len(self.nodes) < 2:
+            return
+
         sorted_nodes = sorted(self.nodes, key=lambda n: n.y)
+
         for i in range(len(sorted_nodes) - 1):
-            current = sorted_nodes[i]
-            next_node = sorted_nodes[i+1]
-            has_outgoing = any(n1 == current for n1, n2, _ in self.connections)
-            if not has_outgoing:
-                self.add_connection(current, next_node)
-        messagebox.showinfo("Auto Connect", "Connected nodes successfully!")
+            self.add_connection(sorted_nodes[i], sorted_nodes[i + 1])
 
+        messagebox.showinfo("Done", "Auto connected")
+
+    # ---------------- DELETE ----------------
     def delete_selected(self):
-        if self.selected_node:
-            conns_to_remove = [c for c in self.connections if c[0] == self.selected_node or c[1] == self.selected_node]
-            for c in conns_to_remove:
-                self.canvas.delete(c[2])
-            
-            self.connections = [c for c in self.connections if c not in conns_to_remove]
-            self.selected_node.delete()
-            self.nodes.remove(self.selected_node)
-            self.selected_node = None
-        else:
-            messagebox.showinfo("Info", "Select a node first to delete.")
+        if not self.selected_node:
+            return
 
+        self.nodes.remove(self.selected_node)
+        self.selected_node.delete()
+        self.selected_node = None
+
+    # ---------------- CLEAR ----------------
     def clear_canvas(self):
         self.canvas.delete("all")
         self.draw_grid()
         self.nodes = []
         self.connections = []
 
+    # ---------------- CONVERT ----------------
     def convert_to_code(self):
         language = self.toolbar.get_language()
+
         try:
             builder = ASTBuilder(self.nodes, self.connections)
             graph = builder.build()
+
             analyzer = SemanticAnalyzer(graph)
             analyzer.analyze()
-            generator = CodeGenerator(graph, language=language)
+
+            generator = CodeGenerator(graph, language)
             code = generator.generate()
+
             self.show_code_window(code, language)
+
         except SemanticError as e:
             messagebox.showerror("Semantic Error", str(e))
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+    # ---------------- OUTPUT WINDOW ----------------
     def show_code_window(self, code, language):
         win = tk.Toplevel(self.root)
-        win.title(f"Generated {language} Code")
-        win.geometry("600x500")
-        text_area = scrolledtext.ScrolledText(win, wrap=tk.WORD, font=("Consolas", 10))
-        text_area.pack(expand=True, fill=tk.BOTH)
+        win.title(f"{language} Code")
+
+        text_area = scrolledtext.ScrolledText(win)
+        text_area.pack(fill=tk.BOTH, expand=True)
+
         text_area.insert(tk.END, code)
         text_area.config(state=tk.DISABLED)

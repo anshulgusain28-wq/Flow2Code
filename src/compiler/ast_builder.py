@@ -19,8 +19,8 @@ class ASTBuilder:
             self.graph.add_node(node, type=node.node_type, text=node.text)
 
         # Add edges
-        for from_node, to_node, _ in self.ui_connections:
-            self.graph.add_edge(from_node, to_node)
+        for from_node, to_node, _, label in self.ui_connections:
+            self.graph.add_edge(from_node, to_node, label=label)
 
         return self.graph
 

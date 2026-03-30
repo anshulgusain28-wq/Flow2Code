@@ -60,11 +60,57 @@ ICONS = {
 }
 
 # Shape configurations
+# SHAPE_DEFAULTS = {
+#     NodeType.START: {"shape": "oval", "color": COLORS["start_fill"], "outline": COLORS["start_outline"], "width": 140, "height": 60},
+#     NodeType.END: {"shape": "oval", "color": COLORS["end_fill"], "outline": COLORS["end_outline"], "width": 140, "height": 60},
+#     NodeType.PROCESS: {"shape": "rectangle", "color": COLORS["process_fill"], "outline": COLORS["process_outline"], "width": 160, "height": 70},
+#     NodeType.DECISION: {"shape": "diamond", "color": COLORS["decision_fill"], "outline": COLORS["decision_outline"], "width": 140, "height": 100},
+#     NodeType.INPUT: {"shape": "parallelogram", "color": COLORS["io_fill"], "outline": COLORS["io_outline"], "width": 160, "height": 70},
+#     NodeType.OUTPUT: {"shape": "parallelogram", "color": COLORS["io_fill"], "outline": COLORS["io_outline"], "width": 160, "height": 70},
+# }
+
+
 SHAPE_DEFAULTS = {
-    NodeType.START: {"shape": "oval", "color": COLORS["start_fill"], "outline": COLORS["start_outline"], "width": 140, "height": 60},
-    NodeType.END: {"shape": "oval", "color": COLORS["end_fill"], "outline": COLORS["end_outline"], "width": 140, "height": 60},
-    NodeType.PROCESS: {"shape": "rectangle", "color": COLORS["process_fill"], "outline": COLORS["process_outline"], "width": 160, "height": 70},
-    NodeType.DECISION: {"shape": "diamond", "color": COLORS["decision_fill"], "outline": COLORS["decision_outline"], "width": 140, "height": 100},
-    NodeType.INPUT: {"shape": "parallelogram", "color": COLORS["io_fill"], "outline": COLORS["io_outline"], "width": 160, "height": 70},
-    NodeType.OUTPUT: {"shape": "parallelogram", "color": COLORS["io_fill"], "outline": COLORS["io_outline"], "width": 160, "height": 70},
+    NodeType.START: {
+        "shape": "oval",
+        "width": 120,
+        "height": 50,
+        "color": "#D1FAE5",
+        "outline": "#059669"
+    },
+    NodeType.END: {
+        "shape": "oval",
+        "width": 120,
+        "height": 50,
+        "color": "#FEE2E2",
+        "outline": "#DC2626"
+    },
+    NodeType.PROCESS: {
+        "shape": "rectangle",
+        "width": 140,
+        "height": 60,
+        "color": "#F3F4F6",
+        "outline": "#374151"
+    },
+    NodeType.DECISION: {
+        "shape": "diamond",
+        "width": 140,
+        "height": 100,
+        "color": "#FEF3C7",
+        "outline": "#D97706"
+    },
+    NodeType.INPUT: {
+        "shape": "rectangle",
+        "width": 140,
+        "height": 60,
+        "color": "#DBEAFE",
+        "outline": "#2563EB"
+    },
+    NodeType.OUTPUT: {
+        "shape": "rectangle",
+        "width": 140,
+        "height": 60,
+        "color": "#E0E7FF",
+        "outline": "#4338CA"
+    }
 }

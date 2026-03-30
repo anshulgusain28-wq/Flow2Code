@@ -7,14 +7,14 @@ class CodeGenerator:
         self.code = []
         self.visited = set()
 
-    def generate(self):
-        start = self.get_start_node()
-        if not start:
-            raise Exception("No START node found")
+   
 
-        self.dfs(start, indent=0)
-        return "\n".join(self.code)
 
+
+
+
+
+   
     def get_start_node(self):
         for node, attr in self.graph.nodes(data=True):
             if attr["type"] == NodeType.START:

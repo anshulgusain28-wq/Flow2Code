@@ -7,21 +7,36 @@ class CodeGenerator:
         self.code = []
         self.visited = set()
 
-   
+    # ---------------- ENTRY ----------------
+    def generate(self):
+        start = self.get_start_node()
+        if not start:
+            raise Exception("No START node found")
 
+        self.code = []
+        self.visited = set()
 
+        if self.language == "C++":
+            self.code.append("#include <bits/stdc++.h>")
+            self.code.append("using namespace std;")
+            self.code.append("")
+            self.code.append("int main() {")
+            self.dfs(start, indent=1)
+            self.code.append("    return 0;")
+            self.code.append("}")
+        else:  # Python
+            self.dfs(start, indent=0)
 
+        return "\n".join(self.code)
 
-
-
-   
+    # ---------------- FIND START ----------------
     def get_start_node(self):
         for node, attr in self.graph.nodes(data=True):
             if attr["type"] == NodeType.START:
                 return node
         return None
 
-    # ---------------- DFS Traversal ----------------
+    # ---------------- DFS ----------------
     def dfs(self, node, indent):
         if node in self.visited:
             return
@@ -32,34 +47,49 @@ class CodeGenerator:
 
         space = "    " * indent
 
-        # ---- HANDLE NODE TYPES ----
-
+        # ---- START ----
         if node_type == NodeType.START:
-            pass  # nothing to generate
+            pass
 
+        # ---- END ----
         elif node_type == NodeType.END:
-            self.code.append(space + "# End")
+            if self.language == "Python":
+                self.code.append(space + "# End")
             return
 
+        # ---- PROCESS ----
         elif node_type == NodeType.PROCESS:
-            self.code.append(space + text)
+            if self.language == "C++":
+                self.code.append(space + text + ";")
+            else:
+                self.code.append(space + text)
 
+        # ---- INPUT ----
         elif node_type == NodeType.INPUT:
-            self.code.append(space + f"{text} = input()")
+            if self.language == "C++":
+                self.code.append(space + f"int {text};")
+                self.code.append(space + f"cin >> {text};")
+            else:
+                self.code.append(space + f"{text} = int(input())")
 
+        # ---- OUTPUT ----
         elif node_type == NodeType.OUTPUT:
-            self.code.append(space + f"print({text})")
+            if self.language == "C++":
+                self.code.append(space + f"cout << {text} << endl;")
+            else:
+                self.code.append(space + f"print({text})")
 
+        # ---- DECISION ----
         elif node_type == NodeType.DECISION:
             self.handle_decision(node, indent)
-            return  # important: stop normal flow here
+            return  # important: stop linear flow
 
-        # ---- CONTINUE LINEAR FLOW ----
+        # ---- CONTINUE ----
         successors = list(self.graph.successors(node))
         if successors:
             self.dfs(successors[0], indent)
 
-    # ---------------- DECISION HANDLING ----------------
+    # ---------------- DECISION ----------------
     def handle_decision(self, node, indent):
         condition = self.graph.nodes[node]["text"]
         space = "    " * indent
@@ -67,10 +97,9 @@ class CodeGenerator:
         true_branch = None
         false_branch = None
 
-        # Identify branches using labels
+        # Identify TRUE / FALSE
         for neighbor in self.graph.successors(node):
             edge = self.graph.get_edge_data(node, neighbor)
-
             label = edge.get("label", "").upper()
 
             if label == "TRUE":
@@ -78,26 +107,32 @@ class CodeGenerator:
             elif label == "FALSE":
                 false_branch = neighbor
 
-        # Safety check
         if true_branch is None and false_branch is None:
             raise Exception("Decision node missing TRUE/FALSE branches")
 
         # ---- IF ----
-        self.code.append(space + f"if {condition}:")
-
-        if true_branch:
-            self.dfs(true_branch, indent + 1)
+        if self.language == "C++":
+            self.code.append(space + f"if ({condition}) {{")
+            if true_branch:
+                self.dfs(true_branch, indent + 1)
+            else:
+                self.code.append(space + "    ;")
         else:
-            self.code.append(space + "    pass")
+            self.code.append(space + f"if {condition}:")
+            if true_branch:
+                self.dfs(true_branch, indent + 1)
+            else:
+                self.code.append(space + "    pass")
 
         # ---- ELSE ----
         if false_branch:
-            self.code.append(space + "else:")
-            self.dfs(false_branch, indent + 1)
-
-    # ---------------- OPTIONAL: DEBUG ----------------
-    def print_graph(self):
-        for node in self.graph.nodes:
-            print(node, self.graph.nodes[node])
-        for edge in self.graph.edges(data=True):
-            print(edge)
+            if self.language == "C++":
+                self.code.append(space + "} else {")
+                self.dfs(false_branch, indent + 1)
+                self.code.append(space + "}")
+            else:
+                self.code.append(space + "else:")
+                self.dfs(false_branch, indent + 1)
+        else:
+            if self.language == "C++":
+                self.code.append(space + "}")

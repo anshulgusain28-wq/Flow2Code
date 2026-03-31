@@ -179,7 +179,7 @@ class Toolbar(tk.Frame):
 
         # Full Width Buttons
         wide_tools = [
-            ("Auto Connect", ICONS["AUTO"], lambda: self.on_tool_select("AUTO_CONNECT"), "#FEF3C7"),
+            ("Auto Connect", ICONS["AUTO"], lambda: self.on_tool_select("AUTO"), "#FEF3C7"),
             ("Compile", ICONS["CONVERT"], lambda: self.on_tool_select("CONVERT"), "#D1FAE5"),
             ("Clear All", "🔁", lambda: self.on_tool_select("CLEAR"), COLORS["surface"]),
         ]

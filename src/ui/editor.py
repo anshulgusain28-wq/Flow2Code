@@ -63,9 +63,138 @@ class FlowchartEditor:
         elif tool == "CONVERT":
             self.convert_to_code()
             return
+        elif tool == "AUTO":
+            self.auto_connect_nodes()
+            return
 
         self.current_tool = tool
         self.connection_start_node = None
+
+
+
+    def get_connection_point(self, shape, direction):
+        x, y = shape.x, shape.y
+        w = 60
+        h = 40
+
+        if direction == "TOP":
+            return (x, y - h)
+        elif direction == "BOTTOM":
+            return (x, y + h)
+        elif direction == "LEFT":
+            return (x - w, y)
+        elif direction == "RIGHT":
+            return (x + w, y)
+
+        return (x, y)
+
+
+     # ---------------- SMART EDGE ----------------
+    def draw_edge(self, node1, node2, label=None):
+        start_dir = "BOTTOM"
+        end_dir = "TOP"
+    
+        # Decision handling
+        if node1.node_type.name == "DECISION":
+            if label == "TRUE":
+                start_dir = "BOTTOM"
+            elif label == "FALSE":
+                start_dir = "RIGHT"
+    
+        # Loop detection (back edge)
+        if node2.y < node1.y:
+            start_dir = "LEFT"
+            end_dir = "LEFT"
+    
+        start = self.get_connection_point(node1, start_dir)
+        end = self.get_connection_point(node2, end_dir)
+    
+        mid_x = (start[0] + end[0]) // 2
+    
+        line_id = self.canvas.create_line(
+            start[0], start[1],
+            mid_x, start[1],
+            mid_x, end[1],
+            end[0], end[1],
+            arrow=tk.LAST,
+            width=2,
+            fill="#374151"
+        )
+    
+        # Label
+        if label:
+            color = "green" if label == "TRUE" else "red"
+            self.canvas.create_text(
+                mid_x,
+                (start[1] + end[1]) // 2,
+                text=label,
+                fill=color,
+                font=("Arial", 9, "bold")
+            )
+    
+        return line_id
+
+
+
+
+
+
+
+
+    def auto_connect_nodes(self):
+        if len(self.nodes) < 2:
+            return
+    
+        # Sort top → bottom
+        sorted_nodes = sorted(self.nodes, key=lambda n: (n.y, n.x))
+    
+        X_THRESHOLD = 120   # max horizontal distance allowed
+    
+        for i in range(len(sorted_nodes) - 1):
+            n1 = sorted_nodes[i]
+    
+            # ❌ Skip decision node
+            if n1.node_type == NodeType.DECISION:
+                continue
+    
+            # Find nearest valid next node BELOW
+            best_candidate = None
+            min_dy = float('inf')
+    
+            for j in range(i + 1, len(sorted_nodes)):
+                n2 = sorted_nodes[j]
+    
+                dy = n2.y - n1.y
+                dx = abs(n2.x - n1.x)
+    
+                # Only downward
+                if dy <= 0:
+                    continue
+    
+                # Only near vertical alignment
+                if dx > X_THRESHOLD:
+                    continue
+    
+                if dy < min_dy:
+                    min_dy = dy
+                    best_candidate = n2
+    
+            if not best_candidate:
+                continue
+    
+            # Avoid duplicate connection
+            exists = any(c[0] == n1 and c[1] == best_candidate for c in self.connections)
+            if exists:
+                continue
+    
+            line_id = self.draw_edge(n1, best_candidate)
+            self.connections.append((n1, best_candidate, line_id, None))
+
+
+
+
+
+
 
     # ---------------- ANCHOR ----------------
     def get_anchor(self, node_from, node_to):
@@ -138,6 +267,19 @@ class FlowchartEditor:
         text = simpledialog.askstring("Edit Node", prompt, parent=self.root)
         if text:
             node.update_text(text)
+
+
+    
+
+
+
+
+
+
+
+
+
+
 
     # ---------------- SMART ARROW ----------------
     def draw_smart_arrow(self, x1, y1, x2, y2):

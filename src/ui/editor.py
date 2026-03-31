@@ -72,16 +72,38 @@ class FlowchartEditor:
         dx = node_to.x - node_from.x
         dy = node_to.y - node_from.y
 
-        if abs(dx) > abs(dy):
-            return (node_from.x + 70, node_from.y) if dx > 0 else (node_from.x - 70, node_from.y)
+    # Get bounding box of shapes
+        bbox_from = self.canvas.bbox(node_from.id)
+        bbox_to = self.canvas.bbox(node_to.id)
+
+        if not bbox_from or not bbox_to:
+            return (node_from.x, node_from.y)
+
+        x1f, y1f, x2f, y2f = bbox_from
+        x1t, y1t, x2t, y2t = bbox_to
+
+    # Vertical connection
+        if abs(dx) < abs(dy):
+            if dy > 0:
+            # going down
+                return (node_from.x, y2f)   # bottom of from-node
+            else:
+                # going up
+                return (node_from.x, y1f)   # top of from-node
+
+    # Horizontal connection
         else:
-            return (node_from.x, node_from.y + 60) if dy > 0 else (node_from.x, node_from.y - 60)
+            if dx > 0:
+                return (x2f, node_from.y)   # right side
+            else:
+                return (x1f, node_from.y)   # left side
 
     # ---------------- ADD NODE ----------------
     def on_drop(self, root_x, root_y, tool_type):
         canvas_x = root_x - self.canvas.winfo_rootx()
         canvas_y = root_y - self.canvas.winfo_rooty()
 
+        # Better spacing grid
         grid_x = 150
         grid_y = 100
 
@@ -89,10 +111,6 @@ class FlowchartEditor:
         canvas_y = (canvas_y // grid_y) * grid_y
 
         self.add_node(tool_type, canvas_x, canvas_y)
-
-
-
-
 
     def add_node(self, node_type, x, y):
         text = "Start" if node_type == NodeType.START else \
@@ -121,9 +139,30 @@ class FlowchartEditor:
         if text:
             node.update_text(text)
 
+    # ---------------- SMART ARROW ----------------
+    def draw_smart_arrow(self, x1, y1, x2, y2):
 
+        # Straight vertical
+        if abs(x1 - x2) < 10:
+            return self.canvas.create_line(
+                x1, y1, x2, y2,
+                arrow=tk.LAST,
+                width=2,
+                fill="#374151",
+                arrowshape=(12, 14, 6)
+            )
 
-    def draw_smooth_line(self, x1, y1, x2, y2):
+        # Straight horizontal
+        if abs(y1 - y2) < 10:
+            return self.canvas.create_line(
+                x1, y1, x2, y2,
+                arrow=tk.LAST,
+                width=2,
+                fill="#374151",
+                arrowshape=(12, 14, 6)
+            )
+
+        # Clean elbow
         mid_y = (y1 + y2) // 2
 
         return self.canvas.create_line(
@@ -131,15 +170,12 @@ class FlowchartEditor:
             x1, mid_y,
             x2, mid_y,
             x2, y2,
-            smooth=True,
             arrow=tk.LAST,
             width=2,
-            fill="#374151"
+            fill="#374151",
+            joinstyle="round",
+            arrowshape=(12, 14, 6)
         )
-
-
-
-
 
     # ---------------- CLICK ----------------
     def on_canvas_click(self, event):
@@ -189,11 +225,11 @@ class FlowchartEditor:
         x1, y1 = self.get_anchor(node1, node2)
         x2, y2 = self.get_anchor(node2, node1)
 
-        line_id = self.draw_smooth_line(x1, y1, x2, y2)
+        line_id = self.draw_smart_arrow(x1, y1, x2, y2)
 
         if label:
             color = "green" if label == "TRUE" else "red"
-            
+
             offset_x = 20 if label == "TRUE" else -20
             offset_y = -10
 
@@ -212,8 +248,11 @@ class FlowchartEditor:
             x1, y1 = self.get_anchor(node1, node2)
             x2, y2 = self.get_anchor(node2, node1)
 
-            mid_y = (y1 + y2) // 2
-            self.canvas.coords(line_id, x1, y1, x1, mid_y, x2, mid_y, x2, y2)
+            if abs(x1 - x2) < 10 or abs(y1 - y2) < 10:
+                self.canvas.coords(line_id, x1, y1, x2, y2)
+            else:
+                mid_y = (y1 + y2) // 2
+                self.canvas.coords(line_id, x1, y1, x1, mid_y, x2, mid_y, x2, y2)
 
     # ---------------- CLEAR ----------------
     def clear_canvas(self):

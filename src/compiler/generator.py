@@ -1,4 +1,6 @@
+import re
 from src.utils.constants import NodeType
+
 
 class CodeGenerator:
     def __init__(self, graph, language="Python"):
@@ -8,7 +10,7 @@ class CodeGenerator:
         self.visited = set()
         self.loop_nodes = set()
 
-    # ---------------- ENTRY ----------------
+    # ──────────────── ENTRY ────────────────────────────────────────────
     def generate(self):
         start = self.get_start_node()
         if not start:
@@ -23,6 +25,14 @@ class CodeGenerator:
             self.code.append("using namespace std;")
             self.code.append("")
             self.code.append("int main() {")
+
+            # ── Auto-declare variables not declared via INPUT nodes ──
+            auto_decls = self._infer_undeclared_cpp()
+            for decl in auto_decls:
+                self.code.append(f"    {decl}")
+            if auto_decls:
+                self.code.append("")   # blank line separator
+
             self.dfs(start, indent=1)
             self.code.append("    return 0;")
             self.code.append("}")
@@ -31,31 +41,69 @@ class CodeGenerator:
 
         return "\n".join(self.code)
 
-    # ---------------- FIND START ----------------
+    # ──────────────── VARIABLE INFERENCE (C++ only) ────────────────────
+    def _infer_undeclared_cpp(self):
+        """
+        Scan all graph nodes to find:
+          - Variables declared by INPUT nodes  → already declared
+          - LHS variables assigned in PROCESS nodes → may need declaration
+
+        Returns a list of declaration strings like ["int a;", "double b;"]
+        for variables used but not declared via INPUT.
+        """
+        # Step 1 – collect variables declared via INPUT nodes
+        declared = set()
+        for node, attr in self.graph.nodes(data=True):
+            if attr["type"] == NodeType.INPUT:
+                for v in attr["text"].split(","):
+                    declared.add(v.strip())
+
+        # Step 2 – scan PROCESS nodes for LHS assignments
+        # Pattern: optional spaces, identifier, then = (not ==)
+        assign_pattern = re.compile(r"^\s*([A-Za-z_]\w*)\s*=[^=]")
+        undeclared_in_order = []   # preserve encounter order
+        seen = set()
+
+        for node, attr in self.graph.nodes(data=True):
+            if attr["type"] == NodeType.PROCESS:
+                text = attr["text"].strip()
+                m = assign_pattern.match(text)
+                if m:
+                    var = m.group(1)
+                    if var not in declared and var not in seen:
+                        seen.add(var)
+                        undeclared_in_order.append((var, text))
+
+        # Step 3 – infer C++ type for each undeclared variable
+        declarations = []
+        for var, expr in undeclared_in_order:
+            cpp_type = self._infer_cpp_type(expr)
+            declarations.append(f"{cpp_type} {var};")
+
+        return declarations
+
+    def _infer_cpp_type(self, expr):
+        """
+        Heuristic type inference from assignment expression RHS.
+          - Contains '.' literal  → double
+          - Contains string literal → string
+          - Otherwise             → int
+        """
+        # Extract RHS (part after the first =)
+        rhs = expr.split("=", 1)[1] if "=" in expr else expr
+
+        if re.search(r'\d+\.\d*|\.\d+', rhs):          # float literal
+            return "double"
+        if '"' in rhs or "'" in rhs:                    # string literal
+            return "string"
+        return "int"
+
+    # ──────────────── FIND START ───────────────────────────────────────
     def get_start_node(self):
         for node, attr in self.graph.nodes(data=True):
             if attr["type"] == NodeType.START:
                 return node
         return None
-
-    # ---------------- LOOP DETECTION ----------------
-    def is_loop(self, decision_node, branch_node):
-        stack = [branch_node]
-        visited = set()
-
-        while stack:
-            curr = stack.pop()
-            if curr == decision_node:
-                return True
-
-            if curr in visited:
-                continue
-            visited.add(curr)
-
-            for nxt in self.graph.successors(curr):
-                stack.append(nxt)
-
-        return False
 
     # ---------------- DFS ----------------
     def dfs(self, node, indent):
@@ -65,7 +113,6 @@ class CodeGenerator:
 
         node_type = self.graph.nodes[node]["type"]
         text = self.graph.nodes[node]["text"]
-
         space = "    " * indent
 
         # ---- START ----
@@ -87,29 +134,40 @@ class CodeGenerator:
 
         # ---- INPUT ----
         elif node_type == NodeType.INPUT:
+            vars_raw = [v.strip() for v in text.split(",")]
             if self.language == "C++":
-                self.code.append(space + f"int {text};")
-                self.code.append(space + f"cin >> {text};")
+                decl_vars = ", ".join(vars_raw)
+                self.code.append(space + f"int {decl_vars};")
+                cin_chain = " >> ".join(vars_raw)
+                self.code.append(space + f"cin >> {cin_chain};")
             else:
-                self.code.append(space + f"{text} = int(input())")
+                if len(vars_raw) == 1:
+                    self.code.append(space + f"{vars_raw[0]} = int(input())")
+                else:
+                    lhs = ", ".join(vars_raw)
+                    self.code.append(space + f"{lhs} = map(int, input().split())")
 
         # ---- OUTPUT ----
         elif node_type == NodeType.OUTPUT:
+            vars_raw = [v.strip() for v in text.split(",")]
             if self.language == "C++":
-                self.code.append(space + f"cout << {text} << endl;")
+                parts = ' << " " << '.join(vars_raw)
+                self.code.append(space + f"cout << {parts} << endl;")
             else:
-                self.code.append(space + f"print({text})")
+                args = ", ".join(vars_raw)
+                self.code.append(space + f"print({args})")
 
         # ---- DECISION ----
         elif node_type == NodeType.DECISION:
             self.handle_decision(node, indent)
-            return
+            return  # important: stop linear flow
 
-        # ---- CONTINUE (FIXED: traverse all successors) ----
-        for nxt in self.graph.successors(node):
-            self.dfs(nxt, indent)
+        # ---- CONTINUE ----
+        successors = list(self.graph.successors(node))
+        if successors:
+            self.dfs(successors[0], indent)
 
-    # ---------------- DECISION ----------------
+    # ──────────────── DECISION ─────────────────────────────────────────
     def handle_decision(self, node, indent):
         condition = self.graph.nodes[node]["text"]
         space = "    " * indent
@@ -120,7 +178,6 @@ class CodeGenerator:
         for neighbor in self.graph.successors(node):
             edge = self.graph.get_edge_data(node, neighbor)
             label = edge.get("label", "").upper()
-
             if label == "TRUE":
                 true_branch = neighbor
             elif label == "FALSE":

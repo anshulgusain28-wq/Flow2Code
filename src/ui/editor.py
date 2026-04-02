@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import simpledialog, messagebox, scrolledtext
+from tkinter import simpledialog, messagebox, scrolledtext, font as tkfont
 from src.ui.toolbar import Toolbar
 from src.ui.shapes import FlowchartShape
 from src.utils.constants import NodeType, COLORS
@@ -12,41 +12,52 @@ class FlowchartEditor:
     def __init__(self, root):
         self.root = root
         self.nodes = []
-        self.connections = []
-
+        self.connections = []   # list of dicts: {node1, node2, line_id, label, label_bg, label_text}
         self.current_tool = "SELECT"
         self.selected_node = None
         self.connection_start_node = None
 
-        # Layout
-        self.paned_window = tk.PanedWindow(root, orient=tk.HORIZONTAL, bg=COLORS["grid"])
+        # ── Layout ──────────────────────────────────────────────────────
+        self.paned_window = tk.PanedWindow(
+            root, orient=tk.HORIZONTAL,
+            bg=COLORS["background"], sashwidth=6,
+            sashrelief=tk.FLAT, sashpad=2
+        )
         self.paned_window.pack(fill=tk.BOTH, expand=True)
 
-        # Toolbar
-        self.toolbar_pane = tk.Frame(self.paned_window, bg=COLORS["background"])
+        # Sidebar
+        self.toolbar_pane = tk.Frame(self.paned_window, bg=COLORS["panel"])
         self.toolbar = Toolbar(self.toolbar_pane, self.set_tool, self.on_drop)
         self.toolbar.pack(fill=tk.BOTH, expand=True)
-        self.paned_window.add(self.toolbar_pane, minsize=250, width=320)
+        self.paned_window.add(self.toolbar_pane, minsize=260, width=300)
 
-        # Canvas
-        self.canvas_pane = tk.Frame(self.paned_window, bg=COLORS["grid"])
-        self.canvas = tk.Canvas(self.canvas_pane, bg="white", highlightthickness=0)
-        self.canvas.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        self.paned_window.add(self.canvas_pane, minsize=400)
+        # Canvas area
+        self.canvas_pane = tk.Frame(self.paned_window, bg=COLORS["background"])
+        self.canvas = tk.Canvas(
+            self.canvas_pane,
+            bg=COLORS["canvas_bg"],
+            highlightthickness=0,
+            relief=tk.FLAT
+        )
+        self.canvas.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
+        self.paned_window.add(self.canvas_pane, minsize=500)
 
         self.draw_grid()
 
-        # Bindings
-        self.canvas.bind("<Button-1>", self.on_canvas_click)
-        self.canvas.bind("<B1-Motion>", self.on_canvas_drag)
+        # ── Bindings ────────────────────────────────────────────────────
+        self.canvas.bind("<Button-1>",        self.on_canvas_click)
+        self.canvas.bind("<B1-Motion>",       self.on_canvas_drag)
         self.canvas.bind("<Double-Button-1>", self.on_double_click)
+        self.canvas.bind("<Configure>",       self.on_resize)
+        self.root.bind("<Delete>",            lambda e: self.delete_selected())
+        self.root.bind("<Escape>",            lambda e: self._deselect_all())
 
-    # ---------------- GRID ----------------
+    # ────────────── GRID ──────────────────────────────────────────────
     def draw_grid(self):
         self.canvas.delete("grid")
-        w = self.canvas.winfo_width()
-        h = self.canvas.winfo_height()
-        step = 25
+        w = self.canvas.winfo_width() or 1600
+        h = self.canvas.winfo_height() or 1000
+        step = 30
 
         for i in range(0, w, step):
             self.canvas.create_line(i, 0, i, h, fill="#E5E7EB", tags="grid")
@@ -55,7 +66,10 @@ class FlowchartEditor:
 
         self.canvas.tag_lower("grid")
 
-    # ---------------- TOOL ----------------
+    def on_resize(self, event):
+        self.draw_grid()
+
+    # ────────────── TOOL SELECTION ────────────────────────────────────
     def set_tool(self, tool):
         if tool == "CLEAR":
             self.clear_canvas()
@@ -69,186 +83,27 @@ class FlowchartEditor:
 
         self.current_tool = tool
         self.connection_start_node = None
+        # Clear selection highlight when switching tool
+        if tool != "SELECT":
+            self._deselect_all()
 
-
-
-    def get_connection_point(self, shape, direction):
-        x, y = shape.x, shape.y
-        w = 60
-        h = 40
-
-        if direction == "TOP":
-            return (x, y - h)
-        elif direction == "BOTTOM":
-            return (x, y + h)
-        elif direction == "LEFT":
-            return (x - w, y)
-        elif direction == "RIGHT":
-            return (x + w, y)
-
-        return (x, y)
-
-
-     # ---------------- SMART EDGE ----------------
-    def draw_edge(self, node1, node2, label=None):
-        start_dir = "BOTTOM"
-        end_dir = "TOP"
-    
-        # Decision handling
-        if node1.node_type.name == "DECISION":
-            if label == "TRUE":
-                start_dir = "BOTTOM"
-            elif label == "FALSE":
-                start_dir = "RIGHT"
-    
-        # Loop detection (back edge)
-        if node2.y < node1.y:
-            start_dir = "LEFT"
-            end_dir = "LEFT"
-    
-        start = self.get_connection_point(node1, start_dir)
-        end = self.get_connection_point(node2, end_dir)
-    
-        mid_x = (start[0] + end[0]) // 2
-    
-        line_id = self.canvas.create_line(
-            start[0], start[1],
-            mid_x, start[1],
-            mid_x, end[1],
-            end[0], end[1],
-            arrow=tk.LAST,
-            width=2,
-            fill="#374151"
-        )
-    
-        # Label
-        if label:
-            color = "green" if label == "TRUE" else "red"
-            self.canvas.create_text(
-                mid_x,
-                (start[1] + end[1]) // 2,
-                text=label,
-                fill=color,
-                font=("Arial", 9, "bold")
-            )
-    
-        return line_id
-
-
-
-
-
-
-
-
-    def auto_connect_nodes(self):
-        if len(self.nodes) < 2:
-            return
-    
-        # Sort top → bottom
-        sorted_nodes = sorted(self.nodes, key=lambda n: (n.y, n.x))
-    
-        X_THRESHOLD = 120   # max horizontal distance allowed
-    
-        for i in range(len(sorted_nodes) - 1):
-            n1 = sorted_nodes[i]
-    
-            # ❌ Skip decision node
-            if n1.node_type == NodeType.DECISION:
-                continue
-    
-            # Find nearest valid next node BELOW
-            best_candidate = None
-            min_dy = float('inf')
-    
-            for j in range(i + 1, len(sorted_nodes)):
-                n2 = sorted_nodes[j]
-    
-                dy = n2.y - n1.y
-                dx = abs(n2.x - n1.x)
-    
-                # Only downward
-                if dy <= 0:
-                    continue
-    
-                # Only near vertical alignment
-                if dx > X_THRESHOLD:
-                    continue
-    
-                if dy < min_dy:
-                    min_dy = dy
-                    best_candidate = n2
-    
-            if not best_candidate:
-                continue
-    
-            # Avoid duplicate connection
-            exists = any(c[0] == n1 and c[1] == best_candidate for c in self.connections)
-            if exists:
-                continue
-    
-            line_id = self.draw_edge(n1, best_candidate)
-            self.connections.append((n1, best_candidate, line_id, None))
-
-
-
-
-
-
-
-    # ---------------- ANCHOR ----------------
-    def get_anchor(self, node_from, node_to):
-        dx = node_to.x - node_from.x
-        dy = node_to.y - node_from.y
-
-    # Get bounding box of shapes
-        bbox_from = self.canvas.bbox(node_from.id)
-        bbox_to = self.canvas.bbox(node_to.id)
-
-        if not bbox_from or not bbox_to:
-            return (node_from.x, node_from.y)
-
-        x1f, y1f, x2f, y2f = bbox_from
-        x1t, y1t, x2t, y2t = bbox_to
-
-    # Vertical connection
-        if abs(dx) < abs(dy):
-            if dy > 0:
-            # going down
-                return (node_from.x, y2f)   # bottom of from-node
-            else:
-                # going up
-                return (node_from.x, y1f)   # top of from-node
-
-    # Horizontal connection
-        else:
-            if dx > 0:
-                return (x2f, node_from.y)   # right side
-            else:
-                return (x1f, node_from.y)   # left side
-
-    # ---------------- ADD NODE ----------------
+    # ────────────── ADD NODE ──────────────────────────────────────────
     def on_drop(self, root_x, root_y, tool_type):
         canvas_x = root_x - self.canvas.winfo_rootx()
         canvas_y = root_y - self.canvas.winfo_rooty()
-
-        # Better spacing grid
-        grid_x = 150
-        grid_y = 100
-
-        canvas_x = (canvas_x // grid_x) * grid_x
-        canvas_y = (canvas_y // grid_y) * grid_y
-
-        self.add_node(tool_type, canvas_x, canvas_y)
+        if 0 <= canvas_x <= self.canvas.winfo_width() and 0 <= canvas_y <= self.canvas.winfo_height():
+            self.add_node(tool_type, canvas_x, canvas_y)
 
     def add_node(self, node_type, x, y):
-        text = "Start" if node_type == NodeType.START else \
-               "End" if node_type == NodeType.END else \
-               "Process" if node_type == NodeType.PROCESS else \
-               "Condition" if node_type == NodeType.DECISION else \
-               "Input" if node_type == NodeType.INPUT else \
-               "Output"
-
+        defaults = {
+            NodeType.START:    "Start",
+            NodeType.END:      "End",
+            NodeType.PROCESS:  "Process",
+            NodeType.DECISION: "Condition",
+            NodeType.INPUT:    "Input",
+            NodeType.OUTPUT:   "Output",
+        }
+        text = defaults.get(node_type, "Node")
         node = FlowchartShape(self.canvas, node_type, x, y, text)
         self.nodes.append(node)
 
@@ -256,93 +111,51 @@ class FlowchartEditor:
             self.prompt_node_text(node)
 
     def prompt_node_text(self, node):
-        prompt = "Enter code:"
-        if node.node_type == NodeType.INPUT:
-            prompt = "Enter variable:"
-        elif node.node_type == NodeType.OUTPUT:
-            prompt = "Enter output:"
-        elif node.node_type == NodeType.DECISION:
-            prompt = "Enter condition (x > 5):"
-
+        prompts = {
+            NodeType.INPUT:    "Enter variable name:",
+            NodeType.OUTPUT:   "Enter value to print:",
+            NodeType.DECISION: "Enter condition (e.g. x > 5):",
+        }
+        prompt = prompts.get(node.node_type, "Enter code:")
         text = simpledialog.askstring("Edit Node", prompt, parent=self.root)
         if text:
             node.update_text(text)
 
-
-    
-
-
-
-
-
-
-
-
-
-
-
-    # ---------------- SMART ARROW ----------------
-    def draw_smart_arrow(self, x1, y1, x2, y2):
-
-        # Straight vertical
-        if abs(x1 - x2) < 10:
-            return self.canvas.create_line(
-                x1, y1, x2, y2,
-                arrow=tk.LAST,
-                width=2,
-                fill="#374151",
-                arrowshape=(12, 14, 6)
-            )
-
-        # Straight horizontal
-        if abs(y1 - y2) < 10:
-            return self.canvas.create_line(
-                x1, y1, x2, y2,
-                arrow=tk.LAST,
-                width=2,
-                fill="#374151",
-                arrowshape=(12, 14, 6)
-            )
-
-        # Clean elbow
-        mid_y = (y1 + y2) // 2
-
-        return self.canvas.create_line(
-            x1, y1,
-            x1, mid_y,
-            x2, mid_y,
-            x2, y2,
-            arrow=tk.LAST,
-            width=2,
-            fill="#374151",
-            joinstyle="round",
-            arrowshape=(12, 14, 6)
-        )
-
-    # ---------------- CLICK ----------------
+    # ────────────── CLICK / DRAG ──────────────────────────────────────
     def on_canvas_click(self, event):
         node = self.find_node_at(event.x, event.y)
 
         if self.current_tool == "ARROW":
-            if node:
-                if not self.connection_start_node:
-                    self.connection_start_node = node
+            if clicked_node:
+                if self.connection_start_node is None:
+                    self.connection_start_node = clicked_node
+                    clicked_node.set_selected(True)
                 else:
-                    self.add_connection(self.connection_start_node, node)
-                    self.connection_start_node = None
-                    self.current_tool = "SELECT"
+                    if clicked_node != self.connection_start_node:
+                        self.connection_start_node.set_selected(False)
+                        self.add_connection(self.connection_start_node, clicked_node)
+                        self.connection_start_node = None
+                        self.current_tool = "SELECT"
+            else:
+                if self.connection_start_node:
+                    self.connection_start_node.set_selected(False)
+                self.connection_start_node = None
         else:
-            self.selected_node = node
+            self._deselect_all()
+            self.selected_node = clicked_node
+            if clicked_node:
+                clicked_node.set_selected(True)
 
-    def find_node_at(self, x, y):
-        for node in reversed(self.nodes):
-            if node.contains(x, y):
-                return node
-        return None
-
-    # ---------------- DRAG ----------------
-    def on_canvas_drag(self, event):
+    def _deselect_all(self):
         if self.selected_node:
+            self.selected_node.set_selected(False)
+            self.selected_node = None
+        if self.connection_start_node:
+            self.connection_start_node.set_selected(False)
+            self.connection_start_node = None
+
+    def on_canvas_drag(self, event):
+        if self.selected_node and self.current_tool != "ARROW":
             dx = event.x - self.selected_node.x
             dy = event.y - self.selected_node.y
             self.selected_node.move(dx, dy)
@@ -353,75 +166,192 @@ class FlowchartEditor:
         if node:
             self.prompt_node_text(node)
 
-    # ---------------- CONNECTION ----------------
+    # ────────────── CONNECTION ────────────────────────────────────────
     def add_connection(self, node1, node2):
-        label = None
-
-        if node1.node_type == NodeType.DECISION:
-            label = simpledialog.askstring("Branch", "TRUE or FALSE?")
-            if not label or label.upper() not in ["TRUE", "FALSE"]:
-                messagebox.showerror("Error", "Enter TRUE or FALSE")
+        # Prevent duplicate
+        for c in self.connections:
+            if c["node1"] == node1 and c["node2"] == node2:
                 return
-            label = label.upper()
 
-        x1, y1 = self.get_anchor(node1, node2)
-        x2, y2 = self.get_anchor(node2, node1)
+        label = None
+        if node1.node_type == NodeType.DECISION:
+            label = simpledialog.askstring(
+                "Branch Type",
+                "Enter branch label (TRUE or FALSE):",
+                parent=self.root
+            )
+            if not label or label.strip().upper() not in ["TRUE", "FALSE"]:
+                messagebox.showerror("Error", "You must enter TRUE or FALSE")
+                return
+            label = label.strip().upper()
 
-        line_id = self.draw_smart_arrow(x1, y1, x2, y2)
+        # Calculate edge-to-edge anchor points
+        ax, ay, bx, by = node1.best_anchor(node2)
 
+        line_id = self.canvas.create_line(
+            ax, ay, bx, by,
+            arrow=tk.LAST,
+            arrowshape=(14, 18, 6),
+            width=2,
+            fill=COLORS["arrow"],
+            smooth=True,
+            joinstyle=tk.ROUND
+        )
+
+        # Label with background pill
+        label_bg_id = None
+        label_text_id = None
         if label:
-            color = "green" if label == "TRUE" else "red"
-
-            offset_x = 20 if label == "TRUE" else -20
-            offset_y = -10
-
-            self.canvas.create_text(
-                (x1 + x2) / 2 + offset_x,
-                (y1 + y2) / 2 + offset_y,
+            mid_x = (ax + bx) / 2
+            mid_y = (ay + by) / 2
+            # background rounded rect
+            pad_x, pad_y = 10, 4
+            bg_x1 = mid_x - pad_x
+            bg_y1 = mid_y - pad_y - 7
+            bg_x2 = mid_x + pad_x
+            bg_y2 = mid_y + pad_y - 7
+            label_bg_id = self.canvas.create_rectangle(
+                bg_x1, bg_y1, bg_x2, bg_y2,
+                fill=COLORS["arrow_label_bg"],
+                outline=COLORS["arrow"],
+                width=1
+            )
+            label_text_id = self.canvas.create_text(
+                mid_x, mid_y - 7,
                 text=label,
-                fill=color,
-                font=("Arial", 9, "bold")
+                fill=COLORS["arrow_label_fg"],
+                font=("Segoe UI", 9, "bold")
             )
 
-        self.connections.append((node1, node2, line_id, label))
+        # Ensure shapes are always on top
+        for node in self.nodes:
+            self.canvas.tag_raise(node.shape_id)
+            self.canvas.tag_raise(node.text_id)
+
+        self.connections.append({
+            "node1": node1,
+            "node2": node2,
+            "line_id": line_id,
+            "label": label,
+            "label_bg": label_bg_id,
+            "label_text": label_text_id,
+        })
 
     def update_connections(self):
-        for node1, node2, line_id, _ in self.connections:
-            x1, y1 = self.get_anchor(node1, node2)
-            x2, y2 = self.get_anchor(node2, node1)
+        for c in self.connections:
+            node1, node2 = c["node1"], c["node2"]
+            ax, ay, bx, by = node1.best_anchor(node2)
+            self.canvas.coords(c["line_id"], ax, ay, bx, by)
 
-            if abs(x1 - x2) < 10 or abs(y1 - y2) < 10:
-                self.canvas.coords(line_id, x1, y1, x2, y2)
+            # Move label & bg
+            if c["label"] and c["label_text"]:
+                mid_x = (ax + bx) / 2
+                mid_y = (ay + by) / 2 - 7
+                self.canvas.coords(c["label_text"], mid_x, mid_y)
+                pad_x, pad_y = 10, 4
+                self.canvas.coords(
+                    c["label_bg"],
+                    mid_x - pad_x, mid_y - pad_y,
+                    mid_x + pad_x, mid_y + pad_y
+                )
+
+    # ────────────── FIND NODE ─────────────────────────────────────────
+    def find_node_at(self, x, y):
+        for node in reversed(self.nodes):
+            if node.contains(x, y):
+                return node
+        return None
+
+    # ────────────── AUTO CONNECT ──────────────────────────────────────
+    def auto_connect(self):
+        if len(self.nodes) < 2:
+            return
+        sorted_nodes = sorted(self.nodes, key=lambda n: n.y)
+        for i in range(len(sorted_nodes) - 1):
+            self.add_connection(sorted_nodes[i], sorted_nodes[i + 1])
+        messagebox.showinfo("Auto Connect", "Nodes connected by vertical order.")
+
+    # ────────────── DELETE / CLEAR ────────────────────────────────────
+    def delete_selected(self):
+        if not self.selected_node:
+            return
+        # Remove connected lines
+        remaining = []
+        for c in self.connections:
+            if c["node1"] == self.selected_node or c["node2"] == self.selected_node:
+                self.canvas.delete(c["line_id"])
+                if c["label_bg"]:
+                    self.canvas.delete(c["label_bg"])
+                if c["label_text"]:
+                    self.canvas.delete(c["label_text"])
             else:
-                mid_y = (y1 + y2) // 2
-                self.canvas.coords(line_id, x1, y1, x1, mid_y, x2, mid_y, x2, y2)
+                remaining.append(c)
+        self.connections = remaining
 
-    # ---------------- CLEAR ----------------
+        self.nodes.remove(self.selected_node)
+        self.selected_node.delete()
+        self.selected_node = None
+
     def clear_canvas(self):
         self.canvas.delete("all")
         self.draw_grid()
         self.nodes = []
         self.connections = []
 
-    # ---------------- CONVERT ----------------
+    # ────────────── CONVERT ───────────────────────────────────────────
     def convert_to_code(self):
+        language = self.toolbar.get_language()
         try:
-            builder = ASTBuilder(self.nodes, self.connections)
+            # Build a simple connections list compatible with ASTBuilder
+            conn_list = [(c["node1"], c["node2"], c["line_id"], c["label"]) for c in self.connections]
+            builder = ASTBuilder(self.nodes, conn_list)
             graph = builder.build()
-
             analyzer = SemanticAnalyzer(graph)
             analyzer.analyze()
-
-            generator = CodeGenerator(graph, self.toolbar.get_language())
+            generator = CodeGenerator(graph, language)
             code = generator.generate()
-
-            self.show_code_window(code)
-
+            self.show_code_window(code, language)
+        except SemanticError as e:
+            messagebox.showerror("Semantic Error", str(e))
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
-    def show_code_window(self, code):
+    # ────────────── OUTPUT WINDOW ─────────────────────────────────────
+    def show_code_window(self, code, language):
         win = tk.Toplevel(self.root)
-        text = scrolledtext.ScrolledText(win)
-        text.pack(fill=tk.BOTH, expand=True)
-        text.insert(tk.END, code)
+        win.title(f"Generated {language} Code – Flow2Code")
+        win.geometry("800x600")
+        win.configure(bg=COLORS["background"])
+        win.minsize(500, 400)
+
+        # Title bar
+        header = tk.Frame(win, bg=COLORS["primary_dark"], height=50)
+        header.pack(fill=tk.X)
+        header.pack_propagate(False)
+        tk.Label(
+            header,
+            text=f"▶  {language} Output",
+            bg=COLORS["primary_dark"],
+            fg="white",
+            font=("Segoe UI", 14, "bold"),
+            padx=16
+        ).pack(side=tk.LEFT, pady=10)
+
+        # Code area
+        frame = tk.Frame(win, bg=COLORS["surface"], padx=2, pady=2)
+        frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
+
+        text_area = scrolledtext.ScrolledText(
+            frame,
+            font=("Cascadia Code", 12) if "Cascadia Code" in tkfont.families() else ("Consolas", 12),
+            bg="#1E1E2E",
+            fg="#CDD6F4",
+            insertbackground="white",
+            relief=tk.FLAT,
+            wrap=tk.NONE,
+            padx=12, pady=12,
+            selectbackground=COLORS["primary"]
+        )
+        text_area.pack(fill=tk.BOTH, expand=True)
+        text_area.insert(tk.END, code)
+        text_area.config(state=tk.DISABLED)

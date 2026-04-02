@@ -250,9 +250,9 @@ class Toolbar(tk.Frame):
             btn.grid(row=0, column=i, padx=5, pady=5, sticky="ew")
 
         wide_tools = [
-            ("Auto Connect", ICONS["AUTO"],    "AUTO_CONNECT", COLORS["warning"]),
-            ("Compile ▶",    ICONS["CONVERT"], "CONVERT",      COLORS["success"]),
-            ("Clear All",    ICONS["CLEAR"],   "CLEAR",        COLORS["text_dim"]),
+            ("Auto Connect", ICONS["AUTO"], lambda: self.on_tool_select("AUTO_CONNECT"), "#FEF3C7"),
+            ("Compile", ICONS["CONVERT"], lambda: self.on_tool_select("CONVERT"), "#D1FAE5"),
+            ("Clear All", "🔁", lambda: self.on_tool_select("CLEAR"), COLORS["surface"]),
         ]
         for i, (text, icon, action, accent) in enumerate(wide_tools):
             btn = ModernButton(

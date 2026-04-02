@@ -75,12 +75,12 @@ ICONS = {
     "AUTO":            "⚡",
 }
 
-# Shape configurations – larger so text fits well
+# Shape configurations
 SHAPE_DEFAULTS = {
-    NodeType.START:    {"shape": "oval",           "color": COLORS["start_fill"],    "outline": COLORS["start_outline"],    "width": 160, "height": 64},
-    NodeType.END:      {"shape": "oval",           "color": COLORS["end_fill"],      "outline": COLORS["end_outline"],      "width": 160, "height": 64},
-    NodeType.PROCESS:  {"shape": "rectangle",      "color": COLORS["process_fill"],  "outline": COLORS["process_outline"],  "width": 180, "height": 72},
-    NodeType.DECISION: {"shape": "diamond",        "color": COLORS["decision_fill"], "outline": COLORS["decision_outline"], "width": 160, "height": 110},
-    NodeType.INPUT:    {"shape": "parallelogram",  "color": COLORS["io_fill"],       "outline": COLORS["io_outline"],       "width": 180, "height": 72},
-    NodeType.OUTPUT:   {"shape": "parallelogram",  "color": COLORS["io_fill"],       "outline": COLORS["io_outline"],       "width": 180, "height": 72},
+    NodeType.START: {"shape": "oval", "color": COLORS["start_fill"], "outline": COLORS["start_outline"], "width": 140, "height": 60},
+    NodeType.END: {"shape": "oval", "color": COLORS["end_fill"], "outline": COLORS["end_outline"], "width": 140, "height": 60},
+    NodeType.PROCESS: {"shape": "rectangle", "color": COLORS["process_fill"], "outline": COLORS["process_outline"], "width": 160, "height": 70},
+    NodeType.DECISION: {"shape": "diamond", "color": COLORS["decision_fill"], "outline": COLORS["decision_outline"], "width": 140, "height": 100},
+    NodeType.INPUT: {"shape": "parallelogram", "color": COLORS["io_fill"], "outline": COLORS["io_outline"], "width": 160, "height": 70},
+    NodeType.OUTPUT: {"shape": "parallelogram", "color": COLORS["io_fill"], "outline": COLORS["io_outline"], "width": 160, "height": 70},
 }

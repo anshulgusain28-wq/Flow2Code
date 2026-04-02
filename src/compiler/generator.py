@@ -8,6 +8,7 @@ class CodeGenerator:
         self.language = language
         self.code = []
         self.visited = set()
+        self.loop_nodes = set()
 
     # ──────────────── ENTRY ────────────────────────────────────────────
     def generate(self):
@@ -17,6 +18,7 @@ class CodeGenerator:
 
         self.code = []
         self.visited = set()
+        self.loop_nodes = set()
 
         if self.language == "C++":
             self.code.append("#include <bits/stdc++.h>")
@@ -34,7 +36,7 @@ class CodeGenerator:
             self.dfs(start, indent=1)
             self.code.append("    return 0;")
             self.code.append("}")
-        else:  # Python
+        else:
             self.dfs(start, indent=0)
 
         return "\n".join(self.code)
@@ -103,7 +105,7 @@ class CodeGenerator:
                 return node
         return None
 
-    # ──────────────── DFS ──────────────────────────────────────────────
+    # ---------------- DFS ----------------
     def dfs(self, node, indent):
         if node in self.visited:
             return
@@ -158,9 +160,9 @@ class CodeGenerator:
         # ---- DECISION ----
         elif node_type == NodeType.DECISION:
             self.handle_decision(node, indent)
-            return   # stop linear DFS here
+            return  # important: stop linear flow
 
-        # ---- CONTINUE linear flow ----
+        # ---- CONTINUE ----
         successors = list(self.graph.successors(node))
         if successors:
             self.dfs(successors[0], indent)
@@ -184,7 +186,30 @@ class CodeGenerator:
         if true_branch is None and false_branch is None:
             raise Exception("Decision node missing TRUE/FALSE branches")
 
-        # ---- IF ----
+        # ---------------- LOOP CHECK ----------------
+        is_loop = False
+        if true_branch and self.is_loop(node, true_branch):
+            is_loop = True
+
+        # ---------------- WHILE LOOP ----------------
+        if is_loop:
+            self.loop_nodes.add(node)
+
+            if self.language == "C++":
+                self.code.append(space + f"while ({condition}) {{")
+                self.dfs(true_branch, indent + 1)
+                self.code.append(space + "}")
+            else:
+                self.code.append(space + f"while {condition}:")
+                self.dfs(true_branch, indent + 1)
+
+            # After loop → follow FALSE branch
+            if false_branch:
+                self.dfs(false_branch, indent)
+
+            return
+
+        # ---------------- NORMAL IF ----------------
         if self.language == "C++":
             self.code.append(space + f"if ({condition}) {{")
             if true_branch:

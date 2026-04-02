@@ -60,9 +60,9 @@ class FlowchartEditor:
         step = 30
 
         for i in range(0, w, step):
-            self.canvas.create_line(i, 0, i, h, fill=COLORS["grid"], tags="grid")
+            self.canvas.create_line(i, 0, i, h, fill="#E5E7EB", tags="grid")
         for i in range(0, h, step):
-            self.canvas.create_line(0, i, w, i, fill=COLORS["grid"], tags="grid")
+            self.canvas.create_line(0, i, w, i, fill="#E5E7EB", tags="grid")
 
         self.canvas.tag_lower("grid")
 
@@ -77,13 +77,8 @@ class FlowchartEditor:
         elif tool == "CONVERT":
             self.convert_to_code()
             return
-        elif tool == "AUTO_CONNECT":
-            self.auto_connect()
-            self.current_tool = "SELECT"
-            return
-        elif tool == "DELETE":
-            self.delete_selected()
-            self.current_tool = "SELECT"
+        elif tool == "AUTO":
+            self.auto_connect_nodes()
             return
 
         self.current_tool = tool
@@ -128,8 +123,7 @@ class FlowchartEditor:
 
     # ────────────── CLICK / DRAG ──────────────────────────────────────
     def on_canvas_click(self, event):
-        x, y = event.x, event.y
-        clicked_node = self.find_node_at(x, y)
+        node = self.find_node_at(event.x, event.y)
 
         if self.current_tool == "ARROW":
             if clicked_node:
